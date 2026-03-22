@@ -1,0 +1,435 @@
+/* Custom fonts - must be at top */
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Nunito:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+/* Haven Design System - "Living Garden" */
+
+@theme {
+  /* Colors - Light Mode */
+  --color-bg-main: #FFFBF7;
+  --color-bg-card: #FFFFFF;
+  --color-bg-input: #F8F5FF;
+  --color-text-primary: #2D2640;
+  --color-text-secondary: #6B6280;
+  --color-text-muted: #A09AB2;
+
+  /* Accent colors */
+  --color-rose: #FF6B8A;
+  --color-violet: #7C5CFC;
+  --color-teal: #00C9A7;
+  --color-amber: #FFB84D;
+  --color-sky: #4DA6FF;
+  --color-peach: #FFAA85;
+  --color-mint: #38D9A9;
+  --color-lavender: #B4A7FF;
+
+  /* Rainbow gradient */
+  --color-rainbow-start: #FF6B8A;
+  --color-rainbow-mid: #7C5CFC;
+  --color-rainbow-end: #00C9A7;
+
+  /* Typography */
+  --font-heading: 'Quicksand', sans-serif;
+  --font-body: 'Nunito', sans-serif;
+
+  /* Spacing and sizing */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 50px;
+}
+
+/* Base styles */
+:root {
+  /* Light theme (default) */
+  --bg-main: #FFFBF7;
+  --bg-card: #FFFFFF;
+  --bg-input: #F8F5FF;
+  --bg-hover: #F5F0FF;
+  --text-primary: #2D2640;
+  --text-secondary: #6B6280;
+  --text-muted: #A09AB2;
+  --border-color: #E8E4F0;
+  --border-hover: #D4CCE8;
+
+  /* Accent colors */
+  --rose: #FF6B8A;
+  --violet: #7C5CFC;
+  --teal: #00C9A7;
+  --amber: #FFB84D;
+  --sky: #4DA6FF;
+  --peach: #FFAA85;
+  --mint: #38D9A9;
+  --lavender: #B4A7FF;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(45, 38, 64, 0.05);
+  --shadow-md: 0 4px 12px rgba(45, 38, 64, 0.08);
+  --shadow-lg: 0 8px 24px rgba(45, 38, 64, 0.12);
+  --shadow-glow: 0 0 20px rgba(124, 92, 252, 0.2);
+  --shadow-rose-glow: 0 0 20px rgba(255, 107, 138, 0.25);
+}
+
+/* Dark theme */
+.dark {
+  --bg-main: #1A1625;
+  --bg-card: #241F31;
+  --bg-input: #2E2840;
+  --bg-hover: #352E48;
+  --text-primary: #F0ECF5;
+  --text-secondary: #A099B2;
+  --text-muted: #6B6280;
+  --border-color: #3D3550;
+  --border-hover: #524A68;
+
+  /* Slightly brighter accents for dark mode */
+  --rose: #FF7B96;
+  --violet: #9B7FFF;
+  --teal: #00E0B8;
+  --amber: #FFC566;
+  --sky: #5CB8FF;
+  --peach: #FFBB99;
+  --mint: #4DE8BB;
+  --lavender: #C4B9FF;
+
+  /* Dark shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Apply theme colors to body */
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+}
+
+/* Only enable transitions after initial load to prevent flash */
+body.theme-ready {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Headings - use font only, let Tailwind handle colors */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+}
+
+/* Focus ring for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Skip link for accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--violet);
+  color: white;
+  padding: 8px 16px;
+  z-index: 100;
+  transition: top 0.3s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Rainbow gradient animation */
+@keyframes gradient-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.gradient-rainbow {
+  background: linear-gradient(90deg, var(--rose), var(--violet), var(--teal), var(--violet), var(--rose));
+  background-size: 200% auto;
+  animation: gradient-flow 4s ease infinite;
+}
+
+.gradient-rainbow-text {
+  background: linear-gradient(90deg, var(--rose), var(--violet), var(--teal));
+  background-size: 200% auto;
+  animation: gradient-flow 4s ease infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Floating animation for Bloom mascot */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Sparkle pulse animation */
+@keyframes sparkle-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.animate-sparkle {
+  animation: sparkle-pulse 2s ease-in-out infinite;
+}
+
+/* Card hover effects */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-glow);
+  border-color: var(--border-hover);
+}
+
+/* Button base styles */
+.btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+.btn-brand {
+  background: linear-gradient(90deg, var(--rose), var(--violet), var(--teal));
+  background-size: 200% auto;
+  animation: gradient-flow 4s ease infinite;
+  color: white;
+  box-shadow: var(--shadow-rose-glow);
+}
+
+.btn-brand:hover {
+  box-shadow: 0 0 30px rgba(255, 107, 138, 0.4);
+}
+
+.btn-rose {
+  background: var(--rose);
+  color: white;
+}
+
+.btn-rose:hover {
+  box-shadow: var(--shadow-rose-glow);
+}
+
+.btn-ghost {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-ghost:hover {
+  border-color: var(--violet);
+  color: var(--violet);
+}
+
+/* Confetti animation */
+@keyframes confetti-pop {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(-100px) rotate(720deg); opacity: 0; }
+}
+
+.confetti-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: confetti-pop 1s ease-out forwards;
+}
+
+/* Staggered fade-up animation for lists */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.4s ease-out forwards;
+}
+
+/* Pop-in animation for chat messages */
+@keyframes pop-in {
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-pop-in {
+  animation: pop-in 0.3s ease-out forwards;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .animate-float,
+  .animate-sparkle,
+  .gradient-rainbow,
+  .gradient-rainbow-text {
+    animation: none !important;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-input);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+
+/* Form inputs */
+input, textarea, select {
+  font-family: var(--font-body);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: var(--text-primary);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 3px rgba(124, 92, 252, 0.15);
+  outline: none;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* Minimum touch target size for accessibility */
+button, a, [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Exception for inline links and small buttons */
+.btn-sm {
+  min-height: 36px;
+  min-width: auto;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+}
+
+/* Screen reader only - hide visually but keep accessible */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.sr-only-focusable:focus,
+.sr-only-focusable:focus-within {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* Secondary button style */
+.btn-secondary {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+/* Visually hidden headings for sections (for screen readers) */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* High contrast focus for dark mode */
+.dark *:focus-visible {
+  outline-color: var(--lavender);
+}
+
+/* Link styles with proper underline for accessibility */
+.text-link {
+  color: var(--violet);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.text-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Ensure proper contrast on backgrounds */
+.bg-primary { background-color: var(--bg-main); }
+.bg-secondary { background-color: var(--bg-card); }
+.bg-tertiary { background-color: var(--bg-input); }
+.bg-hover { background-color: var(--bg-hover); }
