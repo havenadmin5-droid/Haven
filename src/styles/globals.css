@@ -211,8 +211,14 @@ h1, h2, h3, h4, h5, h6 {
   gap: 8px;
 }
 
-.btn:active {
+.btn:active:not(:disabled) {
   transform: scale(0.96);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .btn-brand {

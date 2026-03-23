@@ -17,12 +17,14 @@ export default function RegisterPage() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    trigger,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -33,12 +35,17 @@ export default function RegisterPage() {
 
   const selectedAvatar = watch("avatarEmoji") ?? "🌈";
 
+  // Combined loading state for immediate feedback
+  const showLoading = isLoading || isSubmitting;
+
   const onSubmit = async (data: RegisterFormData) => {
     setServerError(null);
+    setIsLoading(true);
 
     try {
       if (!data) {
         setServerError("Form data is missing. Please try again.");
+        setIsLoading(false);
         return;
       }
 
@@ -54,17 +61,37 @@ export default function RegisterPage() {
 
       if (!result) {
         setServerError("No response from server. Please try again.");
+        setIsLoading(false);
         return;
       }
 
       if (!result.success) {
         setServerError(result.error ?? "An error occurred");
+        setIsLoading(false);
       } else {
         setShowSuccess(true);
       }
     } catch (error) {
       console.error("Registration error:", error);
       setServerError("An unexpected error occurred. Please try again.");
+      setIsLoading(false);
+    }
+  };
+
+  // Validate current step before proceeding
+  const validateAndNextStep = async () => {
+    let fieldsToValidate: (keyof RegisterFormData)[] = [];
+
+    if (step === "credentials") {
+      fieldsToValidate = ["email", "password", "confirmPassword"];
+    } else if (step === "profile") {
+      fieldsToValidate = ["username", "city", "profession", "avatarEmoji"];
+    }
+
+    const isValid = await trigger(fieldsToValidate);
+    if (isValid) {
+      if (step === "credentials") setStep("profile");
+      else if (step === "profile") setStep("privacy");
     }
   };
 
@@ -200,7 +227,7 @@ export default function RegisterPage() {
               )}
             </div>
 
-            <button type="button" onClick={nextStep} className="btn btn-brand w-full">
+            <button type="button" onClick={validateAndNextStep} className="btn btn-brand w-full">
               Continue
             </button>
           </>
@@ -288,7 +315,7 @@ export default function RegisterPage() {
               <button type="button" onClick={prevStep} className="btn btn-ghost flex-1">
                 Back
               </button>
-              <button type="button" onClick={nextStep} className="btn btn-brand flex-1">
+              <button type="button" onClick={validateAndNextStep} className="btn btn-brand flex-1">
                 Continue
               </button>
             </div>
@@ -334,11 +361,11 @@ export default function RegisterPage() {
             </div>
 
             <div className="flex gap-4">
-              <button type="button" onClick={prevStep} className="btn btn-ghost flex-1">
+              <button type="button" onClick={prevStep} disabled={showLoading} className="btn btn-ghost flex-1">
                 Back
               </button>
-              <button type="submit" disabled={isSubmitting} className="btn btn-brand flex-1">
-                {isSubmitting ? (
+              <button type="submit" disabled={showLoading} className="btn btn-brand flex-1">
+                {showLoading ? (
                   <>
                     <Loader2 className="animate-spin" size={20} />
                     Creating...
