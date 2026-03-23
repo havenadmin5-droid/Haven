@@ -88,6 +88,10 @@ export const profileUpdateSchema = z.object({
     .array(z.string())
     .max(10, "You can add up to 10 skills")
     .optional(),
+  interests: z
+    .array(z.string())
+    .max(15, "You can add up to 15 interests")
+    .optional(),
   show_photo: z.boolean().optional(),
   is_available: z.boolean().optional(),
   theme_pref: z.enum(["light", "dark", "system"]).optional(),

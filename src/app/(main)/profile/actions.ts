@@ -30,7 +30,7 @@ export async function getPublicProfile(userId: string): Promise<{ success: boole
     .select(`
       id, username, avatar_emoji, avatar_url, show_photo,
       real_name, show_real_name, pronouns, city, profession,
-      bio, skills, is_verified, is_available,
+      bio, skills, interests, is_verified, is_available,
       is_anonymous, anonymous_alias, created_at,
       is_banned, deleted_at
     `)
@@ -78,7 +78,7 @@ export async function getOwnProfile(): Promise<{ success: boolean; profile?: Pro
     .select(`
       id, username, avatar_emoji, avatar_url, show_photo,
       real_name, show_real_name, email, pronouns, city, profession,
-      bio, skills, is_verified, is_available, is_banned, ban_reason,
+      bio, skills, interests, is_verified, is_available, is_banned, ban_reason,
       is_anonymous, anonymous_alias, anon_unlocked, anon_suspended,
       trust_score, role, theme_pref, deleted_at, created_at, updated_at
     `)
@@ -157,6 +157,9 @@ export async function updateProfile(data: ProfileUpdateData): Promise<ActionResu
   }
   if (parsed.data.skills !== undefined) {
     updateData.skills = parsed.data.skills;
+  }
+  if (parsed.data.interests !== undefined) {
+    updateData.interests = parsed.data.interests;
   }
   if (parsed.data.is_available !== undefined) {
     updateData.is_available = parsed.data.is_available;

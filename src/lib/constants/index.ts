@@ -213,6 +213,192 @@ export const COMMUNITY_EMOJIS = [
 ];
 
 /**
+ * Predefined interests/hobbies for profiles
+ * Users can select multiple or add custom ones via "Other"
+ */
+export const INTERESTS = [
+  // Creative & Arts
+  "Art & Painting",
+  "Photography",
+  "Writing",
+  "Poetry",
+  "Music",
+  "Singing",
+  "Dancing",
+  "Theater & Drama",
+  "Filmmaking",
+  "Animation",
+  "Crafts & DIY",
+  "Fashion & Styling",
+  "Makeup & Beauty",
+  "Interior Design",
+  "Graphic Design",
+
+  // Entertainment
+  "Movies & Cinema",
+  "TV Shows & Series",
+  "Anime & Manga",
+  "K-Pop & K-Drama",
+  "Bollywood",
+  "Stand-up Comedy",
+  "Podcasts",
+  "YouTube",
+
+  // Gaming & Tech
+  "Video Games",
+  "Board Games",
+  "Card Games",
+  "Coding & Programming",
+  "Tech & Gadgets",
+  "Startups",
+  "Cryptocurrency",
+
+  // Sports & Fitness
+  "Yoga",
+  "Gym & Fitness",
+  "Running & Jogging",
+  "Swimming",
+  "Cycling",
+  "Hiking & Trekking",
+  "Cricket",
+  "Football",
+  "Badminton",
+  "Tennis",
+  "Martial Arts",
+  "Sports",
+
+  // Lifestyle & Wellness
+  "Meditation",
+  "Mental Health Advocacy",
+  "Self-Care",
+  "Astrology",
+  "Tarot",
+  "Spirituality",
+  "Veganism",
+  "Sustainable Living",
+
+  // Social & Community
+  "LGBTQ+ Activism",
+  "Volunteering",
+  "Social Work",
+  "Community Building",
+  "Mentoring",
+  "Networking",
+  "Public Speaking",
+
+  // Food & Drink
+  "Cooking",
+  "Baking",
+  "Food Exploring",
+  "Coffee",
+  "Wine & Cocktails",
+  "Vegetarian/Vegan Cooking",
+
+  // Travel & Adventure
+  "Travel",
+  "Solo Travel",
+  "Backpacking",
+  "Road Trips",
+  "Adventure Sports",
+  "Camping",
+  "Beach Life",
+  "Mountains",
+
+  // Reading & Learning
+  "Reading & Books",
+  "Book Clubs",
+  "History",
+  "Philosophy",
+  "Languages",
+  "Science",
+  "Psychology",
+
+  // Music Genres
+  "Pop Music",
+  "Rock & Metal",
+  "Hip-Hop & Rap",
+  "Electronic & EDM",
+  "Classical Music",
+  "Indie Music",
+  "Jazz & Blues",
+
+  // Pets & Nature
+  "Dogs",
+  "Cats",
+  "Pet Parenting",
+  "Bird Watching",
+  "Gardening",
+  "Plants",
+  "Nature & Wildlife",
+
+  // Collecting & Hobbies
+  "Collecting",
+  "Thrifting",
+  "Vintage",
+  "Sneakers",
+  "Tattoos",
+  "Journaling",
+
+  // Other
+  "Other",
+] as const;
+
+/**
+ * Interest categories for grouping in the UI
+ */
+export const INTEREST_CATEGORIES: Record<string, string[]> = {
+  "Creative & Arts": [
+    "Art & Painting", "Photography", "Writing", "Poetry", "Music", "Singing",
+    "Dancing", "Theater & Drama", "Filmmaking", "Animation", "Crafts & DIY",
+    "Fashion & Styling", "Makeup & Beauty", "Interior Design", "Graphic Design"
+  ],
+  "Entertainment": [
+    "Movies & Cinema", "TV Shows & Series", "Anime & Manga", "K-Pop & K-Drama",
+    "Bollywood", "Stand-up Comedy", "Podcasts", "YouTube"
+  ],
+  "Gaming & Tech": [
+    "Video Games", "Board Games", "Card Games", "Coding & Programming",
+    "Tech & Gadgets", "Startups", "Cryptocurrency"
+  ],
+  "Sports & Fitness": [
+    "Yoga", "Gym & Fitness", "Running & Jogging", "Swimming", "Cycling",
+    "Hiking & Trekking", "Cricket", "Football", "Badminton", "Tennis",
+    "Martial Arts", "Sports"
+  ],
+  "Lifestyle & Wellness": [
+    "Meditation", "Mental Health Advocacy", "Self-Care", "Astrology",
+    "Tarot", "Spirituality", "Veganism", "Sustainable Living"
+  ],
+  "Social & Community": [
+    "LGBTQ+ Activism", "Volunteering", "Social Work", "Community Building",
+    "Mentoring", "Networking", "Public Speaking"
+  ],
+  "Food & Drink": [
+    "Cooking", "Baking", "Food Exploring", "Coffee", "Wine & Cocktails",
+    "Vegetarian/Vegan Cooking"
+  ],
+  "Travel & Adventure": [
+    "Travel", "Solo Travel", "Backpacking", "Road Trips", "Adventure Sports",
+    "Camping", "Beach Life", "Mountains"
+  ],
+  "Reading & Learning": [
+    "Reading & Books", "Book Clubs", "History", "Philosophy", "Languages",
+    "Science", "Psychology"
+  ],
+  "Music Genres": [
+    "Pop Music", "Rock & Metal", "Hip-Hop & Rap", "Electronic & EDM",
+    "Classical Music", "Indie Music", "Jazz & Blues"
+  ],
+  "Pets & Nature": [
+    "Dogs", "Cats", "Pet Parenting", "Bird Watching", "Gardening",
+    "Plants", "Nature & Wildlife"
+  ],
+  "Other Hobbies": [
+    "Collecting", "Thrifting", "Vintage", "Sneakers", "Tattoos", "Journaling"
+  ],
+};
+
+/**
  * Crisis helpline numbers (India)
  */
 export const CRISIS_HELPLINES = [

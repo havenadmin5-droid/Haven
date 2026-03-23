@@ -1,16 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Edit2, Save, X, MapPin, Briefcase, Calendar,
-  Shield, Eye, EyeOff, Check, Loader2, UserX, AlertCircle
+  Shield, Eye, EyeOff, Check, Loader2, UserX, AlertCircle,
+  MessageCircle, Heart, Plus, ChevronDown, ChevronUp
 } from 'lucide-react'
 import { profileUpdateSchema, type ProfileUpdateData } from '@/lib/validations/auth'
-import { CITIES, PROFESSIONS, AVATAR_EMOJIS } from '@/lib/constants'
+import { CITIES, PROFESSIONS, AVATAR_EMOJIS, INTERESTS, INTEREST_CATEGORIES } from '@/lib/constants'
 import { updateProfile, getPublicProfile, getOwnProfile } from '@/app/(main)/profile/actions'
 import { PhotoUpload } from '@/components/features/PhotoUpload'
 import { Toggle } from '@/components/ui/Toggle'
@@ -32,6 +33,7 @@ import {
  */
 export function ProfileView() {
   const pathname = usePathname()
+  const router = useRouter()
   const { user, profile: authProfile, refreshProfile } = useAuthStore()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -40,6 +42,9 @@ export function ProfileView() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [showInterestPicker, setShowInterestPicker] = useState(false)
+  const [customInterest, setCustomInterest] = useState('')
+  const [expandedCategories, setExpandedCategories] = useState<string[]>([])
 
   // Extract profile ID from URL if viewing someone else's profile
   const pathParts = pathname?.split('/') ?? []
@@ -111,6 +116,7 @@ export function ProfileView() {
       profession: profile.profession,
       pronouns: profile.pronouns ?? '',
       skills: profile.skills ?? [],
+      interests: profile.interests ?? [],
       is_available: profile.is_available,
     } : undefined,
   })
@@ -129,6 +135,7 @@ export function ProfileView() {
         profession: profile.profession,
         pronouns: profile.pronouns ?? '',
         skills: profile.skills ?? [],
+        interests: profile.interests ?? [],
         is_available: profile.is_available,
       })
     }
@@ -136,6 +143,42 @@ export function ProfileView() {
 
   const watchedEmoji = watch('avatar_emoji')
   const selectedEmoji = watchedEmoji ?? profile?.avatar_emoji ?? '🌈'
+  const watchedInterests = watch('interests') ?? []
+
+  // Handle contact button click
+  const handleContact = () => {
+    if (profile) {
+      router.push(`/chat?user=${profile.id}`)
+    }
+  }
+
+  // Toggle interest selection
+  const toggleInterest = (interest: string) => {
+    const current = watchedInterests
+    if (current.includes(interest)) {
+      setValue('interests', current.filter(i => i !== interest), { shouldDirty: true })
+    } else if (current.length < 15) {
+      setValue('interests', [...current, interest], { shouldDirty: true })
+    }
+  }
+
+  // Add custom interest
+  const addCustomInterest = () => {
+    const trimmed = customInterest.trim()
+    if (trimmed && !watchedInterests.includes(trimmed) && watchedInterests.length < 15) {
+      setValue('interests', [...watchedInterests, trimmed], { shouldDirty: true })
+      setCustomInterest('')
+    }
+  }
+
+  // Toggle category expansion
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev =>
+      prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    )
+  }
 
   const onSubmit = async (data: ProfileUpdateData) => {
     setServerError(null)
@@ -206,19 +249,28 @@ export function ProfileView() {
       {/* Header */}
       <motion.div variants={itemVariants} className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">{isOwnProfile ? 'Your Profile' : profile?.username ?? 'Profile'}</h1>
-        {isOwnProfile && (
-          !isEditing ? (
-            <button onClick={() => setIsEditing(true)} className="btn btn-ghost">
-              <Edit2 size={18} />
-              Edit Profile
+        <div className="flex items-center gap-2">
+          {/* Contact button for other users */}
+          {!isOwnProfile && profile && (
+            <button onClick={handleContact} className="btn btn-brand">
+              <MessageCircle size={18} />
+              Message
             </button>
-          ) : (
-            <button onClick={handleCancel} className="btn btn-ghost">
-              <X size={18} />
-              Cancel
-            </button>
-          )
-        )}
+          )}
+          {isOwnProfile && (
+            !isEditing ? (
+              <button onClick={() => setIsEditing(true)} className="btn btn-ghost">
+                <Edit2 size={18} />
+                Edit Profile
+              </button>
+            ) : (
+              <button onClick={handleCancel} className="btn btn-ghost">
+                <X size={18} />
+                Cancel
+              </button>
+            )
+          )}
+        </div>
       </motion.div>
 
       {/* Messages */}
@@ -301,12 +353,32 @@ export function ProfileView() {
 
           {/* Skills */}
           {profile.skills && profile.skills.length > 0 && !isEditing && (
-            <div className="flex flex-wrap gap-2 mb-4">
-              {profile.skills.map((skill) => (
-                <span key={skill} className="px-3 py-1 rounded-full text-sm bg-[var(--bg-input)] text-[var(--text-secondary)]">
-                  {skill}
-                </span>
-              ))}
+            <div className="mb-4">
+              <p className="text-xs text-[var(--text-muted)] mb-2 font-medium uppercase tracking-wide">Skills</p>
+              <div className="flex flex-wrap gap-2">
+                {profile.skills.map((skill) => (
+                  <span key={skill} className="px-3 py-1 rounded-full text-sm bg-[var(--violet)]/10 text-[var(--violet)] border border-[var(--violet)]/20">
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Interests */}
+          {profile.interests && profile.interests.length > 0 && !isEditing && (
+            <div className="mb-4">
+              <p className="text-xs text-[var(--text-muted)] mb-2 font-medium uppercase tracking-wide flex items-center gap-1">
+                <Heart size={12} />
+                Interests
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {profile.interests.map((interest) => (
+                  <span key={interest} className="px-3 py-1 rounded-full text-sm bg-[var(--rose)]/10 text-[var(--rose)] border border-[var(--rose)]/20">
+                    {interest}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 
@@ -482,6 +554,131 @@ export function ProfileView() {
             <div>
               <label className="block text-sm font-medium mb-2">Pronouns</label>
               <input {...register('pronouns')} className="w-full" placeholder="e.g., they/them" />
+            </div>
+
+            {/* Interests */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium">Interests & Hobbies</label>
+                <span className="text-xs text-[var(--text-muted)]">{watchedInterests.length}/15</span>
+              </div>
+
+              {/* Selected interests */}
+              {watchedInterests.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {watchedInterests.map((interest) => (
+                    <button
+                      key={interest}
+                      type="button"
+                      onClick={() => toggleInterest(interest)}
+                      className="px-3 py-1 rounded-full text-sm bg-[var(--rose)] text-white flex items-center gap-1 hover:bg-[var(--rose)]/80 transition-colors"
+                    >
+                      {interest}
+                      <X size={14} />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Add interests button */}
+              <button
+                type="button"
+                onClick={() => setShowInterestPicker(!showInterestPicker)}
+                className="btn btn-ghost w-full justify-center"
+              >
+                {showInterestPicker ? <ChevronUp size={18} /> : <Plus size={18} />}
+                {showInterestPicker ? 'Hide Options' : 'Add Interests'}
+              </button>
+
+              {/* Interest picker */}
+              <AnimatePresence>
+                {showInterestPicker && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-3 p-4 rounded-xl bg-[var(--bg-input)] space-y-4 max-h-80 overflow-y-auto">
+                      {/* Custom interest input */}
+                      <div>
+                        <label className="block text-xs text-[var(--text-muted)] mb-1">Add Custom Interest</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={customInterest}
+                            onChange={(e) => setCustomInterest(e.target.value)}
+                            placeholder="Type your interest..."
+                            className="flex-1 text-sm"
+                            maxLength={30}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                addCustomInterest()
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={addCustomInterest}
+                            disabled={!customInterest.trim() || watchedInterests.length >= 15}
+                            className="btn btn-ghost px-3"
+                          >
+                            <Plus size={16} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Categorized interests */}
+                      {Object.entries(INTEREST_CATEGORIES).map(([category, interests]) => (
+                        <div key={category}>
+                          <button
+                            type="button"
+                            onClick={() => toggleCategory(category)}
+                            className="flex items-center justify-between w-full text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] py-1"
+                          >
+                            {category}
+                            {expandedCategories.includes(category) ? (
+                              <ChevronUp size={16} />
+                            ) : (
+                              <ChevronDown size={16} />
+                            )}
+                          </button>
+                          <AnimatePresence>
+                            {expandedCategories.includes(category) && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="flex flex-wrap gap-1.5 mt-2 overflow-hidden"
+                              >
+                                {interests.map((interest) => {
+                                  const isSelected = watchedInterests.includes(interest)
+                                  return (
+                                    <button
+                                      key={interest}
+                                      type="button"
+                                      onClick={() => toggleInterest(interest)}
+                                      disabled={!isSelected && watchedInterests.length >= 15}
+                                      className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                                        isSelected
+                                          ? 'bg-[var(--rose)] text-white'
+                                          : 'bg-[var(--bg-card)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50'
+                                      }`}
+                                    >
+                                      {interest}
+                                    </button>
+                                  )
+                                })}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Availability */}

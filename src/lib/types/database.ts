@@ -76,6 +76,7 @@ export interface Profile {
   profession: Profession;
   bio: string | null;
   skills: string[];
+  interests: string[];
   is_verified: boolean;
   is_available: boolean;
   is_banned: boolean;
@@ -103,6 +104,7 @@ export interface PublicProfile {
   profession: Profession;
   bio: string | null;
   skills: string[];
+  interests: string[];
   is_verified: boolean;
   is_available: boolean;
   pronouns: string | null;
