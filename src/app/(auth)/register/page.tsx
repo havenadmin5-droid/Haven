@@ -31,22 +31,40 @@ export default function RegisterPage() {
     },
   });
 
-  const selectedAvatar = watch("avatarEmoji");
+  const selectedAvatar = watch("avatarEmoji") ?? "🌈";
 
   const onSubmit = async (data: RegisterFormData) => {
     setServerError(null);
 
-    const formData = new FormData();
-    Object.entries(data).forEach(([key, value]) => {
-      formData.append(key, value);
-    });
+    try {
+      if (!data) {
+        setServerError("Form data is missing. Please try again.");
+        return;
+      }
 
-    const result = await registerAction(formData);
+      const formData = new FormData();
+      Object.entries(data).forEach(([key, value]) => {
+        // Only append non-null, non-undefined values
+        if (value != null) {
+          formData.append(key, String(value));
+        }
+      });
 
-    if (!result.success) {
-      setServerError(result.error ?? "An error occurred");
-    } else {
-      setShowSuccess(true);
+      const result = await registerAction(formData);
+
+      if (!result) {
+        setServerError("No response from server. Please try again.");
+        return;
+      }
+
+      if (!result.success) {
+        setServerError(result.error ?? "An error occurred");
+      } else {
+        setShowSuccess(true);
+      }
+    } catch (error) {
+      console.error("Registration error:", error);
+      setServerError("An unexpected error occurred. Please try again.");
     }
   };
 
@@ -133,7 +151,7 @@ export default function RegisterPage() {
                 placeholder="you@example.com"
                 {...register("email")}
               />
-              {errors.email && (
+              {errors?.email?.message && (
                 <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
               )}
             </div>
@@ -160,7 +178,7 @@ export default function RegisterPage() {
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
-              {errors.password && (
+              {errors?.password?.message && (
                 <p className="mt-1 text-sm text-red-500">{errors.password.message}</p>
               )}
             </div>
@@ -177,7 +195,7 @@ export default function RegisterPage() {
                 placeholder="Confirm your password"
                 {...register("confirmPassword")}
               />
-              {errors.confirmPassword && (
+              {errors?.confirmPassword?.message && (
                 <p className="mt-1 text-sm text-red-500">{errors.confirmPassword.message}</p>
               )}
             </div>
@@ -207,7 +225,7 @@ export default function RegisterPage() {
                 placeholder="your_username"
                 {...register("username")}
               />
-              {errors.username && (
+              {errors?.username?.message && (
                 <p className="mt-1 text-sm text-red-500">{errors.username.message}</p>
               )}
             </div>
@@ -215,18 +233,18 @@ export default function RegisterPage() {
             <div>
               <label className="block text-sm font-medium mb-2">Avatar</label>
               <div className="grid grid-cols-8 gap-2">
-                {AVATAR_EMOJIS.map((emoji) => (
+                {(AVATAR_EMOJIS ?? []).map((emoji) => (
                   <button
-                    key={emoji}
+                    key={emoji ?? "default"}
                     type="button"
-                    onClick={() => setValue("avatarEmoji", emoji)}
+                    onClick={() => emoji && setValue("avatarEmoji", emoji)}
                     className={`w-10 h-10 text-xl rounded-lg flex items-center justify-center transition-all ${
                       selectedAvatar === emoji
                         ? "bg-[var(--violet)] ring-2 ring-[var(--violet)] ring-offset-2"
                         : "bg-[var(--bg-input)] hover:bg-[var(--bg-hover)]"
                     }`}
                   >
-                    {emoji}
+                    {emoji ?? "🌈"}
                   </button>
                 ))}
               </div>
@@ -238,13 +256,13 @@ export default function RegisterPage() {
               </label>
               <select id="city" className="w-full" {...register("city")}>
                 <option value="">Select your city</option>
-                {CITIES.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
+                {(CITIES ?? []).map((city) => (
+                  <option key={city ?? "unknown"} value={city ?? ""}>
+                    {city ?? "Unknown"}
                   </option>
                 ))}
               </select>
-              {errors.city && (
+              {errors?.city?.message && (
                 <p className="mt-1 text-sm text-red-500">{errors.city.message}</p>
               )}
             </div>
@@ -255,13 +273,13 @@ export default function RegisterPage() {
               </label>
               <select id="profession" className="w-full" {...register("profession")}>
                 <option value="">Select your profession</option>
-                {PROFESSIONS.map((profession) => (
-                  <option key={profession} value={profession}>
-                    {profession}
+                {(PROFESSIONS ?? []).map((profession) => (
+                  <option key={profession ?? "unknown"} value={profession ?? ""}>
+                    {profession ?? "Unknown"}
                   </option>
                 ))}
               </select>
-              {errors.profession && (
+              {errors?.profession?.message && (
                 <p className="mt-1 text-sm text-red-500">{errors.profession.message}</p>
               )}
             </div>

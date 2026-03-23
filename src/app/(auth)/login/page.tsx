@@ -23,16 +23,21 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormData) => {
     setServerError(null);
 
-    const formData = new FormData();
-    formData.append("email", data.email);
-    formData.append("password", data.password);
+    try {
+      const formData = new FormData();
+      formData.append("email", data?.email ?? "");
+      formData.append("password", data?.password ?? "");
 
-    const result = await login(formData);
+      const result = await login(formData);
 
-    if (!result.success) {
-      setServerError(result.error ?? "An error occurred");
+      if (result && !result.success) {
+        setServerError(result.error ?? "An error occurred");
+      }
+      // If successful, the server action redirects
+    } catch (error) {
+      console.error("Login error:", error);
+      setServerError("An unexpected error occurred. Please try again.");
     }
-    // If successful, the server action redirects
   };
 
   return (
@@ -60,10 +65,10 @@ export default function LoginPage() {
             type="email"
             autoComplete="email"
             className="w-full"
-            placeholder="padmanavakarmakar148@gmail.com"
+            placeholder="you@example.com"
             {...register("email")}
           />
-          {errors.email && (
+          {errors?.email?.message && (
             <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
           )}
         </div>
@@ -91,7 +96,7 @@ export default function LoginPage() {
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
-          {errors.password && (
+          {errors?.password?.message && (
             <p className="mt-1 text-sm text-red-500">{errors.password.message}</p>
           )}
         </div>
