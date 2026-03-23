@@ -52,9 +52,17 @@ export async function getPublicProfile(userId: string): Promise<{ success: boole
   }
 
   // Return sanitized profile (without deleted_at and is_banned flags)
+  // Ensure arrays have defaults
   const { deleted_at, is_banned, ...publicProfile } = data;
 
-  return { success: true, profile: publicProfile as Profile };
+  const sanitizedProfile = {
+    ...publicProfile,
+    skills: publicProfile.skills ?? [],
+    interests: publicProfile.interests ?? [],
+    looking_for: publicProfile.looking_for ?? [],
+  };
+
+  return { success: true, profile: sanitizedProfile as Profile };
 }
 
 /**
@@ -97,7 +105,15 @@ export async function getOwnProfile(): Promise<{ success: boolean; profile?: Pro
     return { success: false, error: "Profile not found. Please try logging out and signing up again." };
   }
 
-  return { success: true, profile: data as Profile };
+  // Ensure arrays have defaults instead of null
+  const sanitizedProfile = {
+    ...data,
+    skills: data.skills ?? [],
+    interests: data.interests ?? [],
+    looking_for: data.looking_for ?? [],
+  };
+
+  return { success: true, profile: sanitizedProfile as Profile };
 }
 
 export async function updateProfile(data: ProfileUpdateData): Promise<ActionResult> {
