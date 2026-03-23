@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { MessageCircle, ArrowLeft, Send, Loader2, Check, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -12,7 +13,7 @@ import { containerVariants, itemVariants } from '@/components/app/PageTransition
 import type { ConversationWithDetails, MessageWithSender } from '@/lib/types'
 
 // Import actions from the chat folder
-import { sendMessage, markConversationRead, acceptDM, declineDM } from '@/app/(main)/chat/actions'
+import { sendMessage, markConversationRead, acceptDM, declineDM, startDM, loadConversations as loadConversationsAction, getChatProfile } from '@/app/(main)/chat/actions'
 
 /**
  * ChatView - Messages page for the SPA.
@@ -20,6 +21,9 @@ import { sendMessage, markConversationRead, acceptDM, declineDM } from '@/app/(m
  */
 export function ChatView() {
   const { user, profile } = useAuthStore()
+  const searchParams = useSearchParams()
+  const targetUserId = searchParams.get('user')
+
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([])
   const [isLoadingConversations, setIsLoadingConversations] = useState(true)
   const [selectedConvoId, setSelectedConvoId] = useState<string | null>(null)
@@ -28,8 +32,12 @@ export function ChatView() {
   const [isSending, setIsSending] = useState(false)
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const [remainingMessages, setRemainingMessages] = useState(20)
+  const [isStartingDM, setIsStartingDM] = useState(false)
+  const [dmError, setDmError] = useState<string | null>(null)
+  const [realtimeConnected, setRealtimeConnected] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const processedTargetUser = useRef<string | null>(null)
 
   const currentUserId = user?.id ?? ''
   const isAnonymous = profile?.is_anonymous ?? false
@@ -43,113 +51,45 @@ export function ChatView() {
     profile?.username ?? 'User'
   )
 
-  // Load conversations
+  // Load conversations using server action (bypasses RLS)
   useEffect(() => {
-    const loadConversations = async () => {
+    const fetchConversations = async () => {
       if (!currentUserId) return
 
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('conversation_members')
-        .select(`
-          conversation_id,
-          dm_status,
-          conversations!inner (
-            id,
-            type,
-            name,
-            community_id,
-            updated_at,
-            community:communities (
-              id,
-              name,
-              avatar_emoji
-            )
-          )
-        `)
-        .eq('user_id', currentUserId)
-        .order('conversations(updated_at)', { ascending: false })
+      const result = await loadConversationsAction()
 
-      if (error) {
-        console.error('Load conversations error:', error)
+      if (!result.success || !result.conversations) {
+        console.error('Load conversations error:', result.error)
         setIsLoadingConversations(false)
         return
       }
 
-      // Fetch additional details for each conversation
-      const conversationsWithDetails = await Promise.all(
-        (data ?? []).map(async (item: unknown) => {
-          const typedItem = item as {
-            conversation_id: string
-            dm_status: string
-            conversations: {
-              id: string
-              type: string
-              name: string | null
-              community_id: string | null
-              updated_at: string
-              community: { id: string; name: string; avatar_emoji: string } | null
-            }
-          }
-          const conv = typedItem.conversations
-
-          // Get members
-          const { data: members } = await supabase
-            .from('conversation_members')
-            .select('user_id, dm_status')
-            .eq('conversation_id', conv.id)
-
-          // Get other user for DMs
-          let other_user = null
-          if (conv.type === 'dm') {
-            const otherUserId = members?.find((m) => m.user_id !== currentUserId)?.user_id
-            if (otherUserId) {
-              const { data: otherProfile } = await supabase
-                .from('profiles')
-                .select('id, username, avatar_emoji, avatar_url, show_photo, is_anonymous, anonymous_alias')
-                .eq('id', otherUserId)
-                .single()
-              other_user = otherProfile
-            }
-          }
-
-          // Get last message
-          const { data: lastMsg } = await supabase
-            .from('messages')
-            .select('content, created_at, sender_id')
-            .eq('conversation_id', conv.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single()
-
-          // Get unread count
-          const { count: unreadCount } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id)
-            .neq('sender_id', currentUserId)
-            .gt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-
-          return {
-            id: conv.id,
-            type: conv.type as 'dm' | 'group',
-            name: conv.name,
-            community_id: conv.community_id,
-            updated_at: conv.updated_at,
-            community: conv.community,
-            members: members ?? [],
-            other_user,
-            last_message: lastMsg,
-            unread_count: unreadCount ?? 0,
-          }
-        })
-      )
+      // Transform server action response to ConversationWithDetails format
+      const conversationsWithDetails: ConversationWithDetails[] = result.conversations.map((conv) => ({
+        id: conv.id,
+        type: conv.type,
+        name: conv.name,
+        community_id: null,
+        updated_at: conv.last_message?.created_at ?? new Date().toISOString(),
+        community: null,
+        members: [
+          { user_id: currentUserId, dm_status: conv.dm_status },
+          ...(conv.other_user ? [{ user_id: conv.other_user.id, dm_status: conv.other_dm_status ?? 'accepted' }] : []),
+        ],
+        other_user: conv.other_user ?? null,
+        last_message: conv.last_message ? {
+          content: conv.last_message.content,
+          created_at: conv.last_message.created_at,
+          sender_id: conv.last_message.sender_id,
+        } : null,
+        unread_count: conv.unread_count,
+      }))
 
       setConversations(conversationsWithDetails)
       setIsLoadingConversations(false)
     }
 
-    loadConversations()
+    fetchConversations()
   }, [currentUserId])
 
   // Get display info for other user in DM
@@ -189,8 +129,10 @@ export function ChatView() {
   }
 
   // Load messages for selected conversation
-  const loadMessages = useCallback(async (conversationId: string) => {
-    setIsLoadingMessages(true)
+  const loadMessages = useCallback(async (conversationId: string, isInitialLoad = false) => {
+    if (isInitialLoad) {
+      setIsLoadingMessages(true)
+    }
     const supabase = createClient()
 
     const { data, error } = await supabase
@@ -220,77 +162,263 @@ export function ChatView() {
     if (error) {
       console.error('Load messages error:', error)
     } else {
-      const messagesWithSender = (data ?? []).map((msg) => ({
+      const newMessages = (data ?? []).map((msg) => ({
         ...msg,
         sender: (Array.isArray(msg.sender) ? msg.sender[0] : msg.sender) as MessageWithSender['sender'],
       }))
-      setMessages(messagesWithSender)
+
+      // Merge with existing messages to preserve optimistic updates
+      setMessages((prevMessages) => {
+        // Create a map of existing messages by ID
+        const existingMap = new Map(prevMessages.map(m => [m.id, m]))
+
+        // Add all new messages, updating existing ones
+        newMessages.forEach(msg => {
+          existingMap.set(msg.id, msg)
+        })
+
+        // Convert back to array and sort by created_at
+        const merged = Array.from(existingMap.values())
+        merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+        return merged
+      })
     }
 
-    setIsLoadingMessages(false)
+    if (isInitialLoad) {
+      setIsLoadingMessages(false)
+    }
     await markConversationRead(conversationId)
     setConversations((prev) =>
       prev.map((c) => (c.id === conversationId ? { ...c, unread_count: 0 } : c))
     )
   }, [])
 
+  // Handle ?user= query parameter to start or open a DM
+  useEffect(() => {
+    const handleStartDM = async () => {
+      // Skip if no target user, not loaded, or already processed this user
+      if (!targetUserId || !currentUserId || isLoadingConversations) return
+      if (processedTargetUser.current === targetUserId) return
+
+      // Mark as processed to prevent re-running
+      processedTargetUser.current = targetUserId
+
+      // Don't try to DM yourself
+      if (targetUserId === currentUserId) {
+        setDmError("You can't message yourself")
+        return
+      }
+
+      setIsStartingDM(true)
+      setDmError(null)
+
+      try {
+        const result = await startDM(targetUserId)
+
+        if (result.success && result.conversationId) {
+          // Use server action to get profile (bypasses RLS)
+          const profileResult = await getChatProfile(targetUserId)
+
+          if (profileResult.success && profileResult.profile) {
+            const otherProfile = profileResult.profile
+            const newConvo: ConversationWithDetails = {
+              id: result.conversationId,
+              type: 'dm',
+              name: null,
+              community_id: null,
+              updated_at: new Date().toISOString(),
+              community: null,
+              members: [
+                { user_id: currentUserId, dm_status: 'accepted' },
+                { user_id: targetUserId, dm_status: result.isNew ? 'pending' : 'accepted' }
+              ],
+              other_user: otherProfile,
+              last_message: null,
+              unread_count: 0,
+            }
+
+            // Add to conversations if not already there
+            setConversations(prev => {
+              const exists = prev.find(c => c.id === result.conversationId)
+              return exists ? prev : [newConvo, ...prev]
+            })
+            setSelectedConvoId(result.conversationId)
+            loadMessages(result.conversationId, true)
+          } else {
+            setDmError(profileResult.error ?? 'Failed to load user profile')
+          }
+        } else {
+          setDmError(result.error ?? 'Failed to start conversation')
+        }
+      } catch (error) {
+        console.error('Start DM error:', error)
+        setDmError('Failed to start conversation')
+      } finally {
+        setIsStartingDM(false)
+      }
+    }
+
+    handleStartDM()
+  }, [targetUserId, currentUserId, isLoadingConversations, loadMessages])
+
   // Select conversation
   const handleSelectConversation = (convoId: string) => {
     setSelectedConvoId(convoId)
-    loadMessages(convoId)
+    setMessages([]) // Clear old messages first
+    loadMessages(convoId, true)
   }
 
-  // Subscribe to new messages
+  // Store channel reference for broadcasting
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const channelRef = useRef<any>(null)
+
+  // Subscribe to conversation via Supabase Realtime broadcast (WebSocket)
+  // Using broadcast instead of postgres_changes for more reliable real-time messaging
   useEffect(() => {
-    if (!selectedConvoId) return
+    if (!selectedConvoId || !currentUserId) return
 
     const supabase = createClient()
+    let isSubscribed = true
+
+    // Use a consistent channel name for all users in this conversation
+    const channelName = `chat:${selectedConvoId}`
+
+    const channel = supabase.channel(channelName, {
+      config: {
+        broadcast: { self: false }, // Don't receive own broadcasts
+      },
+    })
+
+    // Listen for broadcast messages
+    channel.on('broadcast', { event: 'new_message' }, (payload) => {
+      if (!isSubscribed) return
+
+      const message = payload.payload as MessageWithSender
+      console.log('📨 Broadcast received:', message.id)
+
+      // Skip if message is from current user
+      if (message.sender_id === currentUserId) return
+
+      setMessages((prev) => {
+        if (prev.some(m => m.id === message.id)) return prev
+        const updated = [...prev, message]
+        updated.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        return updated
+      })
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === selectedConvoId
+            ? {
+                ...c,
+                last_message: {
+                  content: message.content,
+                  created_at: message.created_at,
+                  sender_id: message.sender_id,
+                },
+                updated_at: message.created_at,
+              }
+            : c
+        )
+      )
+    })
+
+    channel.subscribe((status, err) => {
+      if (!isSubscribed) return
+
+      console.log('🔌 Realtime status:', status, err ? `Error: ${err.message}` : '')
+
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ WebSocket connected to conversation:', selectedConvoId)
+        setRealtimeConnected(true)
+        channelRef.current = channel
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('❌ Realtime channel error:', err)
+        setRealtimeConnected(false)
+      } else if (status === 'TIMED_OUT') {
+        console.warn('⏱️ Realtime timed out')
+        setRealtimeConnected(false)
+      } else if (status === 'CLOSED') {
+        console.log('🔌 Realtime connection closed')
+        setRealtimeConnected(false)
+      }
+    })
+
+    return () => {
+      isSubscribed = false
+      channelRef.current = null
+      supabase.removeChannel(channel)
+      setRealtimeConnected(false)
+    }
+  }, [selectedConvoId, currentUserId])
+
+  // Light fallback polling only when realtime fails (30s interval)
+  useEffect(() => {
+    if (!selectedConvoId || realtimeConnected) return
+
+    console.log('Realtime not connected, using fallback polling')
+    const pollInterval = setInterval(() => {
+      loadMessages(selectedConvoId)
+    }, 30000) // Only poll every 30s as fallback
+
+    return () => clearInterval(pollInterval)
+  }, [selectedConvoId, realtimeConnected, loadMessages])
+
+  // Global subscription for new messages across all conversations (for notification badges)
+  useEffect(() => {
+    if (!currentUserId || conversations.length === 0) return
+
+    const supabase = createClient()
+    const conversationIds = conversations.map(c => c.id)
+
+    // Subscribe to messages in all user's conversations
     const channel = supabase
-      .channel(`conversation_${selectedConvoId}`)
+      .channel(`global_messages:${currentUserId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `conversation_id=eq.${selectedConvoId}`,
         },
-        async (payload) => {
-          const { data: sender } = await supabase
-            .from('profiles')
-            .select('id, username, avatar_emoji, avatar_url, show_photo, is_anonymous, anonymous_alias')
-            .eq('id', payload.new.sender_id)
-            .single()
+        (payload) => {
+          const messageConvoId = payload.new.conversation_id
+          // Only process if it's one of user's conversations and not from current user
+          if (!conversationIds.includes(messageConvoId)) return
+          if (payload.new.sender_id === currentUserId) return
 
-          const newMessage: MessageWithSender = {
-            ...(payload.new as MessageWithSender),
-            sender: sender as MessageWithSender['sender'],
-          }
-
-          setMessages((prev) => [...prev, newMessage])
-          setConversations((prev) =>
-            prev.map((c) =>
-              c.id === selectedConvoId
-                ? {
-                    ...c,
-                    last_message: {
-                      content: newMessage.content,
-                      created_at: newMessage.created_at,
-                      sender_id: newMessage.sender_id,
-                    },
-                    updated_at: newMessage.created_at,
-                  }
-                : c
+          // Update unread count for that conversation (if not currently selected)
+          if (messageConvoId !== selectedConvoId) {
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === messageConvoId
+                  ? {
+                      ...c,
+                      last_message: {
+                        content: payload.new.content,
+                        created_at: payload.new.created_at,
+                        sender_id: payload.new.sender_id,
+                      },
+                      unread_count: c.unread_count + 1,
+                      updated_at: payload.new.created_at,
+                    }
+                  : c
+              )
             )
-          )
+          }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Global notifications subscription active')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [selectedConvoId])
+  }, [currentUserId, conversations.length, selectedConvoId])
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -316,8 +444,47 @@ export function ChatView() {
       if (!result.success) {
         setMessageInput(content)
         console.error(result.error)
-      } else if (result.message && isAnonymous) {
-        setRemainingMessages((prev) => Math.max(0, prev - 1))
+      } else if (result.message) {
+        // Add sent message to UI immediately
+        setMessages((prev) => {
+          // Avoid duplicates
+          if (prev.some(m => m.id === result.message!.id)) return prev
+          return [...prev, result.message!]
+        })
+
+        // Update conversation's last message
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === selectedConvoId
+              ? {
+                  ...c,
+                  last_message: {
+                    content: result.message!.content,
+                    created_at: result.message!.created_at,
+                    sender_id: result.message!.sender_id,
+                  },
+                  updated_at: result.message!.created_at,
+                }
+              : c
+          )
+        )
+
+        // Broadcast the message to other users via WebSocket
+        if (channelRef.current) {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'new_message',
+            payload: result.message,
+          })
+          console.log('📤 Message broadcasted:', result.message.id)
+        }
+
+        if (isAnonymous) {
+          setRemainingMessages((prev) => Math.max(0, prev - 1))
+        }
+      } else {
+        // Success but no message returned - reload to get it
+        await loadMessages(selectedConvoId)
       }
     } catch (error) {
       setMessageInput(content)
@@ -367,8 +534,27 @@ export function ChatView() {
     selectedConvo.members.find((m) => m.user_id !== currentUserId)?.dm_status === 'pending' &&
     selectedConvo.members.find((m) => m.user_id === currentUserId)?.dm_status === 'accepted'
 
-  if (isLoadingConversations) {
+  if (isLoadingConversations || isStartingDM) {
     return <ChatSkeleton />
+  }
+
+  // Show DM error if any
+  if (dmError) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+        <div className="text-center">
+          <Bloom mood="wink" size="lg" className="mx-auto mb-4" />
+          <h3 className="text-lg font-bold mb-2">Oops!</h3>
+          <p className="text-[var(--text-muted)] mb-4">{dmError}</p>
+          <button
+            onClick={() => setDmError(null)}
+            className="btn btn-ghost"
+          >
+            Go back to messages
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -399,41 +585,74 @@ export function ChatView() {
               <p className="text-[var(--text-muted)] text-sm">No conversations yet</p>
             </div>
           ) : (
-            conversations.map((convo) => {
-              const display = getOtherUserDisplay(convo)
-              return (
-                <button
-                  key={convo.id}
-                  onClick={() => handleSelectConversation(convo.id)}
-                  className={`w-full flex items-center gap-3 p-4 hover:bg-[var(--bg-hover)] transition-colors ${
-                    selectedConvoId === convo.id ? 'bg-[var(--bg-hover)]' : ''
-                  }`}
-                >
-                  {display.avatar ? (
-                    <img src={display.avatar} alt={display.name} className="w-10 h-10 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-xl">
-                      {display.emoji}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium truncate">{display.name}</span>
-                      {convo.unread_count > 0 && (
-                        <span className="w-5 h-5 rounded-full bg-[var(--sky)] text-white text-xs flex items-center justify-center">
-                          {convo.unread_count}
-                        </span>
+            <>
+              {/* Separate pending message requests */}
+              {conversations.some((c) => c.members.find((m) => m.user_id === currentUserId)?.dm_status === 'pending') && (
+                <div className="px-4 py-2 bg-[var(--amber)]/10 border-b border-[var(--amber)]/20">
+                  <p className="text-xs font-medium text-[var(--amber)]">Message Requests</p>
+                </div>
+              )}
+              {conversations.map((convo) => {
+                const display = getOtherUserDisplay(convo)
+                const myMembership = convo.members.find((m) => m.user_id === currentUserId)
+                const isPendingRequest = myMembership?.dm_status === 'pending'
+                const isWaitingForResponse = convo.type === 'dm' &&
+                  myMembership?.dm_status === 'accepted' &&
+                  convo.members.find((m) => m.user_id !== currentUserId)?.dm_status === 'pending'
+
+                return (
+                  <button
+                    key={convo.id}
+                    onClick={() => handleSelectConversation(convo.id)}
+                    className={`w-full flex items-center gap-3 p-4 hover:bg-[var(--bg-hover)] transition-colors ${
+                      selectedConvoId === convo.id ? 'bg-[var(--bg-hover)]' : ''
+                    } ${isPendingRequest ? 'bg-[var(--amber)]/5' : ''}`}
+                  >
+                    <div className="relative">
+                      {display.avatar ? (
+                        <img src={display.avatar} alt={display.name} className="w-10 h-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-xl">
+                          {display.emoji}
+                        </div>
+                      )}
+                      {isPendingRequest && (
+                        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--amber)] flex items-center justify-center">
+                          <span className="text-white text-[10px]">!</span>
+                        </div>
                       )}
                     </div>
-                    {convo.last_message && (
-                      <p className="text-sm text-[var(--text-muted)] truncate">
-                        {convo.last_message.content}
-                      </p>
-                    )}
-                  </div>
-                </button>
-              )
-            })
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium truncate">{display.name}</span>
+                        {convo.unread_count > 0 && !isPendingRequest && (
+                          <span className="w-5 h-5 rounded-full bg-[var(--sky)] text-white text-xs flex items-center justify-center">
+                            {convo.unread_count}
+                          </span>
+                        )}
+                      </div>
+                      {isPendingRequest ? (
+                        <p className="text-sm text-[var(--amber)] truncate">
+                          Wants to message you
+                        </p>
+                      ) : isWaitingForResponse ? (
+                        <p className="text-sm text-[var(--text-muted)] truncate italic">
+                          Request sent
+                        </p>
+                      ) : convo.last_message ? (
+                        <p className="text-sm text-[var(--text-muted)] truncate">
+                          {convo.last_message.content}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-[var(--text-muted)] truncate">
+                          Start a conversation
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+            </>
           )}
         </div>
       </motion.div>
@@ -465,7 +684,14 @@ export function ChatView() {
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <h2 className="font-bold truncate">{display.name}</h2>
+                      <div className="flex items-center gap-2">
+                        <h2 className="font-bold truncate">{display.name}</h2>
+                        {/* Connection status indicator */}
+                        <div
+                          className={`w-2 h-2 rounded-full ${realtimeConnected ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`}
+                          title={realtimeConnected ? 'Live connection' : 'Connecting...'}
+                        />
+                      </div>
                       {selectedConvo.type === 'group' && (
                         <p className="text-xs text-[var(--text-muted)]">{selectedConvo.members.length} members</p>
                       )}
@@ -517,16 +743,23 @@ export function ChatView() {
 
             {/* Message Input */}
             <div className="p-4 border-t border-[var(--border-color)]">
-              {waitingForAcceptance ? (
-                <p className="text-center text-sm text-[var(--text-muted)]">
-                  Message request sent. Waiting for response...
-                </p>
-              ) : needsToAcceptDM ? (
+              {needsToAcceptDM ? (
                 <p className="text-center text-sm text-[var(--text-muted)]">
                   Accept the message request to reply
                 </p>
               ) : (
                 <>
+                  {/* Waiting for acceptance banner (but still allow sending) */}
+                  {waitingForAcceptance && (
+                    <div className="text-center pb-3 mb-3 border-b border-[var(--border-color)]">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--amber)]/10 text-[var(--amber)]">
+                        <div className="w-2 h-2 rounded-full bg-[var(--amber)] animate-pulse" />
+                        <span className="text-xs font-medium">
+                          Waiting for {getOtherUserDisplay(selectedConvo).name} to accept
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   {typingUsers.length > 0 && (
                     <div className="text-xs text-[var(--text-muted)] mb-2">
                       {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
@@ -546,7 +779,7 @@ export function ChatView() {
                           handleSendMessage()
                         }
                       }}
-                      placeholder="Type a message..."
+                      placeholder={waitingForAcceptance ? "Say hello..." : "Type a message..."}
                       rows={1}
                       className="flex-1 resize-none max-h-32"
                       disabled={isSending}
@@ -559,12 +792,12 @@ export function ChatView() {
                       {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                     </button>
                   </div>
+                  {isAnonymous && (
+                    <p className="text-xs text-[var(--text-muted)] mt-2 text-center">
+                      {remainingMessages}/20 messages remaining today
+                    </p>
+                  )}
                 </>
-              )}
-              {isAnonymous && !needsToAcceptDM && !waitingForAcceptance && (
-                <p className="text-xs text-[var(--text-muted)] mt-2 text-center">
-                  {remainingMessages}/20 messages remaining today
-                </p>
               )}
             </div>
           </>

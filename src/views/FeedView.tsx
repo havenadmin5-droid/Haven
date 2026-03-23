@@ -6,9 +6,11 @@ import { Sparkles, Plus, Rss } from 'lucide-react'
 import { PostCard } from '@/components/features/PostCard'
 import { CreatePostForm } from '@/components/features/CreatePostForm'
 import { Bloom } from '@/components/mascot'
+import { WelcomeModal } from '@/components/features/WelcomeModal'
 import { useAuthStore } from '@/stores/authStore'
 import { useFeedPosts } from '@/hooks'
 import { containerVariants, itemVariants } from '@/components/app/PageTransition'
+import { createClient } from '@/lib/supabase/client'
 import type { PostWithAuthor } from '@/lib/types'
 
 /**
@@ -16,10 +18,21 @@ import type { PostWithAuthor } from '@/lib/types'
  * Uses React Query for cached data fetching.
  */
 export function FeedView() {
-  const { user, profile } = useAuthStore()
+  const { user, profile, refreshProfile } = useAuthStore()
   const { data: feedPosts, isLoading } = useFeedPosts()
   const [posts, setPosts] = useState<PostWithAuthor[]>([])
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false)
+
+  // Check for new user flag to show welcome modal
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isNewUser = localStorage.getItem('haven_new_user')
+      if (isNewUser === 'true') {
+        setShowWelcomeModal(true)
+      }
+    }
+  }, [])
 
   // Sync posts state with fetched data
   useEffect(() => {
@@ -33,6 +46,34 @@ export function FeedView() {
     setShowCreateForm(false)
   }
 
+  const handleWelcomeClose = () => {
+    localStorage.removeItem('haven_new_user')
+    setShowWelcomeModal(false)
+  }
+
+  const handleWelcomeSave = async (data: { realName: string; showRealName: boolean; showPhoto: boolean }) => {
+    if (!user?.id) return
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        real_name: data.realName || null,
+        show_real_name: data.showRealName,
+        show_photo: data.showPhoto,
+      })
+      .eq('id', user.id)
+
+    if (error) {
+      console.error('Error updating profile:', error)
+      throw error
+    }
+
+    // Refresh profile in store
+    await refreshProfile()
+    localStorage.removeItem('haven_new_user')
+  }
+
   // Show skeleton only on initial load (no cached data)
   if (isLoading && posts.length === 0) {
     return <FeedSkeleton />
@@ -43,6 +84,15 @@ export function FeedView() {
   const currentUserId = user?.id ?? ''
 
   return (
+    <>
+    {/* Welcome Modal for new users */}
+    <WelcomeModal
+      isOpen={showWelcomeModal}
+      onClose={handleWelcomeClose}
+      onSave={handleWelcomeSave}
+      username={username}
+    />
+
     <motion.div
       className="max-w-2xl mx-auto"
       variants={containerVariants}
@@ -113,6 +163,7 @@ export function FeedView() {
         </motion.div>
       )}
     </motion.div>
+    </>
   )
 }
 

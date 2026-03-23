@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Loader2, Check } from "lucide-react";
@@ -69,6 +70,10 @@ export default function RegisterPage() {
         setServerError(result.error ?? "An error occurred");
         setIsLoading(false);
       } else {
+        // Mark as new user for welcome modal
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('haven_new_user', 'true');
+        }
         setShowSuccess(true);
       }
     } catch (error) {
@@ -106,18 +111,29 @@ export default function RegisterPage() {
     else if (step === "privacy") setStep("profile");
   };
 
+  // Auto-redirect to feed after successful registration
+  useEffect(() => {
+    if (showSuccess) {
+      const timer = setTimeout(() => {
+        window.location.href = "/feed";
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSuccess]);
+
   if (showSuccess) {
     return (
       <div className="text-center">
         <Bloom mood="love" size="xl" className="mx-auto mb-6" />
         <h2 className="text-2xl font-bold mb-4">Welcome to Haven!</h2>
         <p className="text-[var(--text-secondary)] mb-8">
-          We&apos;ve sent a verification email to your inbox.
-          Please click the link to verify your account.
+          Your account has been created successfully.
+          Redirecting you to the app...
         </p>
-        <Link href="/login" className="btn btn-brand">
-          Go to Login
-        </Link>
+        <div className="flex items-center justify-center gap-2 text-[var(--violet)]">
+          <Loader2 className="animate-spin" size={20} />
+          <span>Loading...</span>
+        </div>
       </div>
     );
   }

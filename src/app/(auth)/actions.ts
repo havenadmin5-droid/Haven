@@ -126,18 +126,22 @@ export async function register(formData: FormData): Promise<ActionResult> {
       return { success: false, error: "Unable to create account. Please try again." };
     }
 
-    // Update profile with user-provided data using service role (bypasses RLS)
-    // Note: A basic profile is already created by the handle_new_user trigger,
-    // so we update it with the user's chosen username, city, profession, etc.
+    // Upsert profile with user-provided data using service role (bypasses RLS)
+    // Using upsert to handle both cases:
+    // 1. Profile already created by trigger - update with user data
+    // 2. Profile not yet created - insert with user data
     const { error: profileError } = await serviceClient
       .from("profiles")
-      .update({
+      .upsert({
+        id: authData.user.id,
+        email: parsed.data.email,
         username: parsed.data.username?.toLowerCase() ?? "",
         city: parsed.data.city ?? "Other",
         profession: parsed.data.profession ?? "Other",
         avatar_emoji: parsed.data.avatarEmoji ?? "🌈",
-      })
-      .eq("id", authData.user.id);
+      }, {
+        onConflict: "id",
+      });
 
     if (profileError) {
       console.error("Profile update error:", profileError?.message ?? "Unknown error");

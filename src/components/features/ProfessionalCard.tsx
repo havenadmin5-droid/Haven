@@ -21,6 +21,7 @@ export function ProfessionalCard({
   currentUserId,
 }: ProfessionalCardProps) {
   const isOwnProfile = currentUserId === profile.id;
+
   return (
     <motion.div
       className="card group"

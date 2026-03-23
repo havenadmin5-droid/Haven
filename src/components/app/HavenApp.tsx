@@ -92,8 +92,8 @@ function getViewForPath(pathname: string) {
   if (pathname.startsWith('/communities')) return CommunitiesView
   if (pathname === '/jobs') return JobsView
   if (pathname === '/events') return EventsView
-  if (pathname === '/chat') return ChatView
-  if (pathname === '/profile') return ProfileView
+  if (pathname.startsWith('/chat')) return ChatView
+  if (pathname.startsWith('/profile')) return ProfileView
   if (pathname === '/safety') return SafetyView
   if (pathname === '/resources') return ResourcesView
   if (pathname === '/map') return MapView

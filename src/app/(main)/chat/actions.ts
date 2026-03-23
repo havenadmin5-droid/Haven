@@ -6,11 +6,23 @@ import { revalidatePath } from "next/cache";
 import type { ActionResult, MessageWithSender } from "@/lib/types";
 
 /**
- * Start or get existing DM conversation with another user
+ * Start or get existing DM conversation with another user.
+ *
+ * Flow:
+ * 1. Validate user is authenticated and not anonymous
+ * 2. Check if blocked
+ * 3. Check if other user exists
+ * 4. Find or create DM conversation
+ * 5. Return conversation ID
  */
 export async function startDM(
   otherUserId: string
-): Promise<ActionResult & { conversationId?: string }> {
+): Promise<ActionResult & { conversationId?: string; isNew?: boolean }> {
+  // Validate input
+  if (!otherUserId) {
+    return { success: false, error: "Invalid user ID" };
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -20,19 +32,45 @@ export async function startDM(
     return { success: false, error: "Not authenticated" };
   }
 
-  // Check if user is anonymous
-  const { data: profile } = await supabase
+  // Can't message yourself
+  if (user.id === otherUserId) {
+    return { success: false, error: "You can't message yourself" };
+  }
+
+  const serviceClient = createServiceClient();
+
+  // Check if current user is anonymous
+  const { data: myProfile } = await serviceClient
     .from("profiles")
-    .select("is_anonymous")
+    .select("is_anonymous, is_banned")
     .eq("id", user.id)
     .single();
 
-  if (profile?.is_anonymous) {
-    return { success: false, error: "Anonymous users cannot initiate DMs" };
+  if (myProfile?.is_anonymous) {
+    return { success: false, error: "Disable anonymous mode to send messages" };
   }
 
-  // Check if blocked
-  const { data: blocked } = await supabase.rpc("is_blocked", {
+  if (myProfile?.is_banned) {
+    return { success: false, error: "Your account is restricted" };
+  }
+
+  // Check if other user exists and is not banned
+  const { data: otherProfile, error: profileError } = await serviceClient
+    .from("profiles")
+    .select("id, is_banned, deleted_at")
+    .eq("id", otherUserId)
+    .single();
+
+  if (profileError || !otherProfile) {
+    return { success: false, error: "User not found" };
+  }
+
+  if (otherProfile.is_banned || otherProfile.deleted_at) {
+    return { success: false, error: "This user is not available" };
+  }
+
+  // Check if either user has blocked the other
+  const { data: blocked } = await serviceClient.rpc("is_blocked", {
     user_a: user.id,
     user_b: otherUserId,
   });
@@ -41,43 +79,34 @@ export async function startDM(
     return { success: false, error: "Cannot message this user" };
   }
 
-  const serviceClient = createServiceClient();
+  // Find existing DM between these two users
+  // First, get all DM conversation IDs where current user is a member
+  const { data: myConvos } = await serviceClient
+    .from("conversation_members")
+    .select("conversation_id")
+    .eq("user_id", user.id);
 
-  // Check if DM already exists
-  const { data: existingConvo } = await serviceClient
-    .from("conversations")
-    .select(`
-      id,
-      conversation_members!inner (user_id)
-    `)
-    .eq("type", "dm")
-    .contains("conversation_members.user_id", [user.id, otherUserId]);
+  const myConvoIds = myConvos?.map(c => c.conversation_id) ?? [];
 
-  // Find conversation that has both users
-  let conversationId: string | null = null;
+  if (myConvoIds.length > 0) {
+    // Find conversations where other user is also a member AND it's a DM
+    const { data: sharedConvos } = await serviceClient
+      .from("conversation_members")
+      .select(`
+        conversation_id,
+        conversations!inner (id, type)
+      `)
+      .eq("user_id", otherUserId)
+      .in("conversation_id", myConvoIds);
 
-  if (existingConvo && existingConvo.length > 0) {
-    // Check each conversation to find one with exactly these two users
-    for (const convo of existingConvo) {
-      const { data: members } = await serviceClient
-        .from("conversation_members")
-        .select("user_id")
-        .eq("conversation_id", convo.id);
+    // Find the DM conversation (type = 'dm')
+    const existingDM = sharedConvos?.find(
+      (c: { conversations: { type: string } }) => c.conversations?.type === "dm"
+    );
 
-      if (
-        members &&
-        members.length === 2 &&
-        members.some((m) => m.user_id === user.id) &&
-        members.some((m) => m.user_id === otherUserId)
-      ) {
-        conversationId = convo.id;
-        break;
-      }
+    if (existingDM) {
+      return { success: true, conversationId: existingDM.conversation_id, isNew: false };
     }
-  }
-
-  if (conversationId) {
-    return { success: true, conversationId };
   }
 
   // Create new DM conversation
@@ -89,7 +118,7 @@ export async function startDM(
 
   if (convoError || !newConvo) {
     console.error("Create conversation error:", convoError);
-    return { success: false, error: "Failed to create conversation" };
+    return { success: false, error: "Failed to start conversation" };
   }
 
   // Add both users - initiator is accepted, recipient is pending
@@ -102,11 +131,13 @@ export async function startDM(
 
   if (membersError) {
     console.error("Add members error:", membersError);
-    return { success: false, error: "Failed to create conversation" };
+    // Clean up the conversation we just created
+    await serviceClient.from("conversations").delete().eq("id", newConvo.id);
+    return { success: false, error: "Failed to start conversation" };
   }
 
   revalidatePath("/chat");
-  return { success: true, conversationId: newConvo.id };
+  return { success: true, conversationId: newConvo.id, isNew: true };
 }
 
 /**
@@ -501,4 +532,254 @@ export async function leaveGroupChat(conversationId: string): Promise<ActionResu
 
   revalidatePath("/chat");
   return { success: true };
+}
+
+/**
+ * Get a user's profile for chat context.
+ * Uses service client to bypass RLS for reliable fetching.
+ */
+export async function getChatProfile(
+  userId: string
+): Promise<{ success: boolean; profile?: { id: string; username: string; avatar_emoji: string; avatar_url: string | null; show_photo: boolean; is_anonymous: boolean; anonymous_alias: string | null }; error?: string }> {
+  if (!userId) {
+    return { success: false, error: "Invalid user ID" };
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const serviceClient = createServiceClient();
+
+  const { data, error } = await serviceClient
+    .from("profiles")
+    .select("id, username, avatar_emoji, avatar_url, show_photo, is_anonymous, anonymous_alias, deleted_at, is_banned")
+    .eq("id", userId)
+    .single();
+
+  if (error || !data) {
+    return { success: false, error: "User not found" };
+  }
+
+  if (data.deleted_at || data.is_banned) {
+    return { success: false, error: "User not available" };
+  }
+
+  return {
+    success: true,
+    profile: {
+      id: data.id,
+      username: data.username,
+      avatar_emoji: data.avatar_emoji,
+      avatar_url: data.avatar_url,
+      show_photo: data.show_photo,
+      is_anonymous: data.is_anonymous,
+      anonymous_alias: data.anonymous_alias,
+    },
+  };
+}
+
+/**
+ * Load all conversations for the current user.
+ * Includes other participant info, last message, and unread count.
+ */
+export async function loadConversations(): Promise<{
+  success: boolean;
+  conversations?: Array<{
+    id: string;
+    type: "dm" | "group";
+    name: string | null;
+    dm_status: string;
+    other_dm_status?: string;
+    is_muted: boolean;
+    last_read_at: string | null;
+    other_user?: {
+      id: string;
+      username: string;
+      avatar_emoji: string;
+      avatar_url: string | null;
+      show_photo: boolean;
+      is_anonymous: boolean;
+      anonymous_alias: string | null;
+    };
+    last_message?: {
+      content: string | null;
+      created_at: string;
+      sender_id: string;
+      is_system: boolean;
+    };
+    unread_count: number;
+  }>;
+  error?: string;
+}> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const serviceClient = createServiceClient();
+
+  // Get all conversations where user is a member
+  const { data: memberships, error: membershipError } = await serviceClient
+    .from("conversation_members")
+    .select(`
+      conversation_id,
+      dm_status,
+      is_muted,
+      last_read_at,
+      conversations (
+        id,
+        type,
+        name,
+        updated_at
+      )
+    `)
+    .eq("user_id", user.id)
+    .neq("dm_status", "declined");
+
+  if (membershipError) {
+    console.error("Load conversations error:", membershipError);
+    return { success: false, error: "Failed to load conversations" };
+  }
+
+  if (!memberships || memberships.length === 0) {
+    return { success: true, conversations: [] };
+  }
+
+  const conversationIds = memberships.map(m => m.conversation_id);
+
+  // Get all members for these conversations (to find other users in DMs)
+  const { data: allMembers } = await serviceClient
+    .from("conversation_members")
+    .select("conversation_id, user_id, dm_status")
+    .in("conversation_id", conversationIds);
+
+  // Get profiles for other members
+  const otherUserIds = [...new Set(
+    allMembers?.filter(m => m.user_id !== user.id).map(m => m.user_id) ?? []
+  )];
+
+  const { data: profiles } = await serviceClient
+    .from("profiles")
+    .select("id, username, avatar_emoji, avatar_url, show_photo, is_anonymous, anonymous_alias")
+    .in("id", otherUserIds);
+
+  const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? []);
+
+  // Get last message for each conversation
+  const { data: lastMessages } = await serviceClient
+    .from("messages")
+    .select("conversation_id, content, created_at, sender_id, is_system")
+    .in("conversation_id", conversationIds)
+    .order("created_at", { ascending: false });
+
+  // Group last messages by conversation (take first one = most recent)
+  const lastMessageMap = new Map<string, typeof lastMessages extends (infer T)[] ? T : never>();
+  lastMessages?.forEach(msg => {
+    if (!lastMessageMap.has(msg.conversation_id)) {
+      lastMessageMap.set(msg.conversation_id, msg);
+    }
+  });
+
+  // Build conversation list
+  const conversations = memberships.map(membership => {
+    const convo = membership.conversations as { id: string; type: "dm" | "group"; name: string | null; updated_at: string };
+
+    // For DMs, find the other user
+    let otherUser;
+    let otherDmStatus: string | undefined;
+    if (convo.type === "dm") {
+      const otherMember = allMembers?.find(
+        m => m.conversation_id === membership.conversation_id && m.user_id !== user.id
+      );
+      if (otherMember) {
+        otherUser = profileMap.get(otherMember.user_id);
+        otherDmStatus = otherMember.dm_status;
+      }
+    }
+
+    const lastMessage = lastMessageMap.get(membership.conversation_id);
+
+    // Calculate unread count
+    let unreadCount = 0;
+    if (membership.last_read_at && lastMessages) {
+      unreadCount = lastMessages.filter(
+        m => m.conversation_id === membership.conversation_id &&
+             m.created_at > membership.last_read_at! &&
+             m.sender_id !== user.id
+      ).length;
+    } else if (!membership.last_read_at && lastMessages) {
+      unreadCount = lastMessages.filter(
+        m => m.conversation_id === membership.conversation_id &&
+             m.sender_id !== user.id
+      ).length;
+    }
+
+    return {
+      id: convo.id,
+      type: convo.type,
+      name: convo.name,
+      dm_status: membership.dm_status,
+      other_dm_status: otherDmStatus,
+      is_muted: membership.is_muted,
+      last_read_at: membership.last_read_at,
+      other_user: otherUser ? {
+        id: otherUser.id,
+        username: otherUser.username,
+        avatar_emoji: otherUser.avatar_emoji,
+        avatar_url: otherUser.avatar_url,
+        show_photo: otherUser.show_photo,
+        is_anonymous: otherUser.is_anonymous,
+        anonymous_alias: otherUser.anonymous_alias,
+      } : undefined,
+      last_message: lastMessage ? {
+        content: lastMessage.content,
+        created_at: lastMessage.created_at,
+        sender_id: lastMessage.sender_id,
+        is_system: lastMessage.is_system,
+      } : undefined,
+      unread_count: unreadCount,
+    };
+  });
+
+  // Sort by last message time (most recent first)
+  conversations.sort((a, b) => {
+    const aTime = a.last_message?.created_at ?? "0";
+    const bTime = b.last_message?.created_at ?? "0";
+    return bTime.localeCompare(aTime);
+  });
+
+  return { success: true, conversations };
+}
+
+/**
+ * Get pending message requests count for badge display
+ */
+export async function getPendingRequestsCount(): Promise<{ success: boolean; count?: number; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const serviceClient = createServiceClient();
+
+  const { count, error } = await serviceClient
+    .from("conversation_members")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("dm_status", "pending");
+
+  if (error) {
+    console.error("Get pending requests error:", error);
+    return { success: false, error: "Failed to get pending requests" };
+  }
+
+  return { success: true, count: count ?? 0 };
 }

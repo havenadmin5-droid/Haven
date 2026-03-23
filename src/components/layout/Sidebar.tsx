@@ -9,6 +9,7 @@ import { NAV_ITEMS, BOTTOM_NAV_ITEMS } from "@/lib/constants";
 import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/stores/authStore";
+import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { Logo } from "@/components/brand/Logo";
 import type { NavItem } from "@/lib/types";
 
@@ -17,6 +18,7 @@ export function Sidebar() {
   const router = useRouter();
   const { isAdmin } = useAuth();
   const { logout, profile } = useAuthStore();
+  const { totalCount: chatBadgeCount } = useChatNotifications();
 
   const handleLogout = async () => {
     await logout();
@@ -37,7 +39,12 @@ export function Sidebar() {
       <nav className="flex-1 px-4 py-6 overflow-y-auto">
         <ul className="space-y-2">
           {NAV_ITEMS.map((item) => (
-            <NavLink key={item.href} item={item} isActive={pathname === item.href} />
+            <NavLink
+              key={item.href}
+              item={item}
+              isActive={pathname === item.href}
+              badge={item.href === '/chat' ? chatBadgeCount : undefined}
+            />
           ))}
         </ul>
       </nav>
@@ -76,7 +83,7 @@ export function Sidebar() {
   );
 }
 
-function NavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {
+function NavLink({ item, isActive, badge }: { item: NavItem; isActive: boolean; badge?: number }) {
   const IconComponent = Icons[item.icon as keyof typeof Icons] as React.ComponentType<{
     size?: number;
     className?: string;
@@ -87,7 +94,7 @@ function NavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {
       <Link
         href={item.href}
         prefetch={true}
-        className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+        className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative ${
           isActive
             ? "bg-[var(--bg-hover)]"
             : "hover:bg-[var(--bg-hover)] hover:translate-x-1"
@@ -95,15 +102,21 @@ function NavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {
       >
         {/* Icon */}
         <span
-          className="transition-colors"
+          className="transition-colors relative"
           style={{ color: isActive ? item.color : "var(--text-secondary)" }}
         >
           {IconComponent && <IconComponent size={22} />}
+          {/* Badge */}
+          {badge !== undefined && badge > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-[var(--rose)] text-white text-[10px] font-bold">
+              {badge > 99 ? '99+' : badge}
+            </span>
+          )}
         </span>
 
         {/* Label */}
         <span
-          className={`font-medium transition-colors ${
+          className={`font-medium transition-colors flex-1 ${
             isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"
           } group-hover:text-[var(--text-primary)]`}
         >

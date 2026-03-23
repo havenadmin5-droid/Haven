@@ -18,7 +18,7 @@ const CSP_HEADER = [
   "style-src 'self' 'unsafe-inline' fonts.googleapis.com",
   "font-src 'self' fonts.gstatic.com",
   "img-src 'self' blob: data: *.supabase.co images.unsplash.com tile.openstreetmap.org *.tile.openstreetmap.org",
-  "connect-src 'self' *.supabase.co",
+  "connect-src 'self' *.supabase.co wss://*.supabase.co", // Added wss:// for Realtime WebSocket
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

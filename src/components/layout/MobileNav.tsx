@@ -4,10 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as Icons from "lucide-react";
 import { MOBILE_NAV_ITEMS } from "@/lib/constants";
+import { useChatNotifications } from "@/hooks/useChatNotifications";
 import type { NavItem } from "@/lib/types";
 
 export function MobileNav() {
   const pathname = usePathname();
+  const { totalCount: chatBadgeCount } = useChatNotifications();
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 lg:hidden bg-[var(--bg-card)] border-t border-[var(--border-color)] z-50">
@@ -17,6 +19,7 @@ export function MobileNav() {
             key={item.href}
             item={item}
             isActive={pathname === item.href}
+            badge={item.href === '/chat' ? chatBadgeCount : undefined}
           />
         ))}
       </ul>
@@ -24,7 +27,7 @@ export function MobileNav() {
   );
 }
 
-function MobileNavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {
+function MobileNavLink({ item, isActive, badge }: { item: NavItem; isActive: boolean; badge?: number }) {
   const IconComponent = Icons[item.icon as keyof typeof Icons] as React.ComponentType<{
     size?: number;
     className?: string;
@@ -40,8 +43,14 @@ function MobileNavLink({ item, isActive }: { item: NavItem; isActive: boolean })
         }`}
         aria-label={item.name}
       >
-        <span style={{ color: isActive ? item.color : "var(--text-muted)" }}>
+        <span className="relative" style={{ color: isActive ? item.color : "var(--text-muted)" }}>
           {IconComponent && <IconComponent size={24} />}
+          {/* Badge */}
+          {badge !== undefined && badge > 0 && (
+            <span className="absolute -top-1 -right-2 min-w-[16px] h-[16px] px-1 flex items-center justify-center rounded-full bg-[var(--rose)] text-white text-[9px] font-bold">
+              {badge > 99 ? '99+' : badge}
+            </span>
+          )}
         </span>
         <span
           className={`text-xs font-medium ${

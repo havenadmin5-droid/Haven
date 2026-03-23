@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { motion } from 'framer-motion'
@@ -10,8 +11,9 @@ import {
 } from 'lucide-react'
 import { profileUpdateSchema, type ProfileUpdateData } from '@/lib/validations/auth'
 import { CITIES, PROFESSIONS, AVATAR_EMOJIS } from '@/lib/constants'
-import { updateProfile } from '@/app/(main)/profile/actions'
+import { updateProfile, getPublicProfile, getOwnProfile } from '@/app/(main)/profile/actions'
 import { PhotoUpload } from '@/components/features/PhotoUpload'
+import { Toggle } from '@/components/ui/Toggle'
 import { formatDistanceToNow } from 'date-fns'
 import { useAuthStore } from '@/stores/authStore'
 import { createClient } from '@/lib/supabase/client'
@@ -26,9 +28,10 @@ import {
 
 /**
  * ProfileView - Profile page for the SPA.
- * Fetches user's own profile client-side.
+ * Handles both own profile (/profile) and viewing others (/profile/[id]).
  */
 export function ProfileView() {
+  const pathname = usePathname()
   const { user, profile: authProfile, refreshProfile } = useAuthStore()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -36,34 +39,57 @@ export function ProfileView() {
   const [serverError, setServerError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
-  // Fetch full profile
+  // Extract profile ID from URL if viewing someone else's profile
+  const pathParts = pathname?.split('/') ?? []
+  const profileIdFromUrl = pathParts.length > 2 ? pathParts[2] : null
+  const isOwnProfile = !profileIdFromUrl || profileIdFromUrl === user?.id
+  const targetUserId = profileIdFromUrl ?? user?.id
+
+
+  // Fetch profile (own or other user's) via server actions
   useEffect(() => {
     const fetchProfile = async () => {
-      if (!user) return
+      if (!targetUserId) {
+        setFetchError('No user ID provided')
+        setIsLoading(false)
+        return
+      }
 
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(`
-          id, username, avatar_emoji, avatar_url, show_photo,
-          real_name, show_real_name, email, pronouns, city, profession,
-          bio, skills, is_verified, is_available, is_banned, ban_reason,
-          is_anonymous, anonymous_alias, anon_unlocked, anon_suspended,
-          trust_score, role, theme_pref, deleted_at, created_at, updated_at
-        `)
-        .eq('id', user.id)
-        .single<Profile>()
+      setIsLoading(true)
+      setFetchError(null)
 
-      if (!error && data) {
-        setProfile(data)
-        setAvatarUrl(data.avatar_url)
+      if (isOwnProfile) {
+        // Fetch full profile for own user via server action
+        const result = await getOwnProfile()
+
+        if (!result.success) {
+          setFetchError(result.error ?? 'Profile not found')
+        } else if (result.profile) {
+          setProfile(result.profile)
+          setAvatarUrl(result.profile.avatar_url)
+        } else {
+          setFetchError('Profile not found')
+        }
+      } else {
+        // Fetch public profile for other users via server action
+        const result = await getPublicProfile(targetUserId)
+
+        if (!result.success) {
+          setFetchError(result.error ?? 'Profile not found')
+        } else if (result.profile) {
+          setProfile(result.profile)
+          setAvatarUrl(result.profile.show_photo ? result.profile.avatar_url : null)
+        } else {
+          setFetchError('Profile not found')
+        }
       }
       setIsLoading(false)
     }
 
     fetchProfile()
-  }, [user])
+  }, [targetUserId, isOwnProfile])
 
   const {
     register,
@@ -155,7 +181,15 @@ export function ProfileView() {
   if (!profile) {
     return (
       <div className="text-center py-12">
-        <p className="text-[var(--text-secondary)]">Unable to load profile</p>
+        <UserX size={48} className="mx-auto mb-4 text-[var(--text-muted)]" />
+        <p className="text-[var(--text-secondary)]">
+          {fetchError ?? 'Unable to load profile'}
+        </p>
+        {fetchError && (
+          <p className="text-sm text-[var(--text-muted)] mt-2">
+            This user may not exist or you may not have permission to view their profile.
+          </p>
+        )}
       </div>
     )
   }
@@ -171,17 +205,19 @@ export function ProfileView() {
     >
       {/* Header */}
       <motion.div variants={itemVariants} className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold">Your Profile</h1>
-        {!isEditing ? (
-          <button onClick={() => setIsEditing(true)} className="btn btn-ghost">
-            <Edit2 size={18} />
-            Edit Profile
-          </button>
-        ) : (
-          <button onClick={handleCancel} className="btn btn-ghost">
-            <X size={18} />
-            Cancel
-          </button>
+        <h1 className="text-2xl font-bold">{isOwnProfile ? 'Your Profile' : profile?.username ?? 'Profile'}</h1>
+        {isOwnProfile && (
+          !isEditing ? (
+            <button onClick={() => setIsEditing(true)} className="btn btn-ghost">
+              <Edit2 size={18} />
+              Edit Profile
+            </button>
+          ) : (
+            <button onClick={handleCancel} className="btn btn-ghost">
+              <X size={18} />
+              Cancel
+            </button>
+          )
         )}
       </motion.div>
 
@@ -246,7 +282,7 @@ export function ProfileView() {
           </div>
 
           {/* Bio */}
-          {isEditing ? (
+          {isOwnProfile && isEditing ? (
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">Bio</label>
               <textarea
@@ -280,15 +316,17 @@ export function ProfileView() {
               <Calendar size={14} />
               Member {memberSince}
             </span>
-            <span className="flex items-center gap-1">
-              <Shield size={14} />
-              Trust score: {profile.trust_score}
-            </span>
+            {isOwnProfile && (
+              <span className="flex items-center gap-1">
+                <Shield size={14} />
+                Trust score: {profile.trust_score ?? 0}
+              </span>
+            )}
           </div>
         </motion.div>
 
-        {/* How Others See You */}
-        {!isEditing && (
+        {/* How Others See You - Only show for own profile */}
+        {isOwnProfile && !isEditing && (
           <motion.div variants={itemVariants} className="card mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Eye size={18} className="text-[var(--violet)]" />
@@ -353,8 +391,8 @@ export function ProfileView() {
           </motion.div>
         )}
 
-        {/* Edit Form Fields */}
-        {isEditing && (
+        {/* Edit Form Fields - Only for own profile */}
+        {isOwnProfile && isEditing && (
           <motion.div variants={itemVariants} className="card space-y-6">
             <h3 className="text-lg font-bold">Edit Details</h3>
 
@@ -366,11 +404,13 @@ export function ProfileView() {
                 emoji={selectedEmoji}
                 onUploadComplete={(url) => setAvatarUrl(url)}
               />
-              <div className="flex items-center gap-2 mt-4">
-                <input type="checkbox" id="show_photo" {...register('show_photo')} className="w-4 h-4" />
-                <label htmlFor="show_photo" className="text-sm text-[var(--text-secondary)]">
-                  Show photo on profile
-                </label>
+              <div className="mt-4">
+                <Toggle
+                  checked={watch('show_photo') ?? false}
+                  onChange={(checked) => setValue('show_photo', checked, { shouldDirty: true })}
+                  label="Show photo on profile"
+                  description="When off, your emoji avatar is shown instead"
+                />
               </div>
             </div>
 
@@ -408,11 +448,13 @@ export function ProfileView() {
             <div>
               <label className="block text-sm font-medium mb-2">Real Name (Optional)</label>
               <input {...register('real_name')} className="w-full" placeholder="Your real name" />
-              <div className="flex items-center gap-2 mt-2">
-                <input type="checkbox" id="show_real_name" {...register('show_real_name')} className="w-4 h-4" />
-                <label htmlFor="show_real_name" className="text-sm text-[var(--text-secondary)]">
-                  Show real name on profile
-                </label>
+              <div className="mt-3">
+                <Toggle
+                  checked={watch('show_real_name') ?? false}
+                  onChange={(checked) => setValue('show_real_name', checked, { shouldDirty: true })}
+                  label="Show real name on profile"
+                  description="When off, only your username is visible"
+                />
               </div>
             </div>
 
@@ -443,9 +485,13 @@ export function ProfileView() {
             </div>
 
             {/* Availability */}
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="is_available" {...register('is_available')} className="w-4 h-4" />
-              <label htmlFor="is_available" className="text-sm">Available for connections</label>
+            <div>
+              <Toggle
+                checked={watch('is_available') ?? false}
+                onChange={(checked) => setValue('is_available', checked, { shouldDirty: true })}
+                label="Available for connections"
+                description="Show that you're open to meeting new people"
+              />
             </div>
 
             {/* Save Button */}
