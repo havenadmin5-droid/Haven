@@ -399,6 +399,22 @@ export const INTEREST_CATEGORIES: Record<string, string[]> = {
 };
 
 /**
+ * "Looking for" options - what kind of connections users want
+ */
+export const LOOKING_FOR_OPTIONS = [
+  { value: "friends", label: "Friends", emoji: "👋", description: "Casual friendships and hangouts" },
+  { value: "networking", label: "Professional Networking", emoji: "💼", description: "Career connections and opportunities" },
+  { value: "mentorship", label: "Mentorship", emoji: "🌱", description: "Guidance or willing to mentor others" },
+  { value: "dating", label: "Dating", emoji: "💜", description: "Romantic connections" },
+  { value: "support", label: "Support & Advice", emoji: "🤝", description: "Emotional support and guidance" },
+  { value: "community", label: "Community", emoji: "🏳️‍🌈", description: "Being part of the LGBTQ+ community" },
+  { value: "events", label: "Event Buddies", emoji: "🎉", description: "People to attend events with" },
+  { value: "hobbies", label: "Hobby Partners", emoji: "🎨", description: "People who share my interests" },
+  { value: "roommates", label: "Roommates", emoji: "🏠", description: "Safe housing and flatmates" },
+  { value: "collaborators", label: "Collaborators", emoji: "✨", description: "Creative or project partners" },
+] as const;
+
+/**
  * Crisis helpline numbers (India)
  */
 export const CRISIS_HELPLINES = [

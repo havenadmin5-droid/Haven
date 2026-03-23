@@ -11,7 +11,7 @@ import {
   MessageCircle, Heart, Plus, ChevronDown, ChevronUp
 } from 'lucide-react'
 import { profileUpdateSchema, type ProfileUpdateData } from '@/lib/validations/auth'
-import { CITIES, PROFESSIONS, AVATAR_EMOJIS, INTERESTS, INTEREST_CATEGORIES } from '@/lib/constants'
+import { CITIES, PROFESSIONS, AVATAR_EMOJIS, INTERESTS, INTEREST_CATEGORIES, LOOKING_FOR_OPTIONS } from '@/lib/constants'
 import { updateProfile, getPublicProfile, getOwnProfile } from '@/app/(main)/profile/actions'
 import { PhotoUpload } from '@/components/features/PhotoUpload'
 import { Toggle } from '@/components/ui/Toggle'
@@ -117,6 +117,7 @@ export function ProfileView() {
       pronouns: profile.pronouns ?? '',
       skills: profile.skills ?? [],
       interests: profile.interests ?? [],
+      looking_for: profile.looking_for ?? [],
       is_available: profile.is_available,
     } : undefined,
   })
@@ -136,6 +137,7 @@ export function ProfileView() {
         pronouns: profile.pronouns ?? '',
         skills: profile.skills ?? [],
         interests: profile.interests ?? [],
+        looking_for: profile.looking_for ?? [],
         is_available: profile.is_available,
       })
     }
@@ -144,6 +146,7 @@ export function ProfileView() {
   const watchedEmoji = watch('avatar_emoji')
   const selectedEmoji = watchedEmoji ?? profile?.avatar_emoji ?? '🌈'
   const watchedInterests = watch('interests') ?? []
+  const watchedLookingFor = watch('looking_for') ?? []
 
   // Handle contact button click
   const handleContact = () => {
@@ -178,6 +181,16 @@ export function ProfileView() {
         ? prev.filter(c => c !== category)
         : [...prev, category]
     )
+  }
+
+  // Toggle looking_for selection
+  const toggleLookingFor = (value: string) => {
+    const current = watchedLookingFor
+    if (current.includes(value)) {
+      setValue('looking_for', current.filter(v => v !== value), { shouldDirty: true })
+    } else if (current.length < 5) {
+      setValue('looking_for', [...current, value], { shouldDirty: true })
+    }
   }
 
   const onSubmit = async (data: ProfileUpdateData) => {
@@ -334,9 +347,10 @@ export function ProfileView() {
           </div>
 
           {/* Bio */}
+          {/* Bio - More prominent */}
           {isOwnProfile && isEditing ? (
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Bio</label>
+              <label className="block text-sm font-medium mb-2">About Me</label>
               <textarea
                 {...register('bio')}
                 className="w-full h-24 resize-none"
@@ -348,8 +362,31 @@ export function ProfileView() {
               </p>
             </div>
           ) : profile.bio ? (
-            <p className="text-[var(--text-secondary)] mb-4">{profile.bio}</p>
+            <div className="mb-4 p-4 rounded-xl bg-[var(--bg-input)]">
+              <p className="text-xs text-[var(--text-muted)] mb-2 font-medium uppercase tracking-wide">About</p>
+              <p className="text-[var(--text-primary)] leading-relaxed">{profile.bio}</p>
+            </div>
           ) : null}
+
+          {/* Looking for - What kind of connections */}
+          {profile.looking_for && profile.looking_for.length > 0 && !isEditing && (
+            <div className="mb-4">
+              <p className="text-xs text-[var(--text-muted)] mb-2 font-medium uppercase tracking-wide">Looking for</p>
+              <div className="flex flex-wrap gap-2">
+                {profile.looking_for.map((item) => {
+                  const option = LOOKING_FOR_OPTIONS.find(o => o.value === item)
+                  return (
+                    <span
+                      key={item}
+                      className="px-3 py-1 rounded-full text-sm bg-[var(--teal)]/10 text-[var(--teal)] border border-[var(--teal)]/20 flex items-center gap-1"
+                    >
+                      {option?.emoji} {option?.label ?? item}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Skills */}
           {profile.skills && profile.skills.length > 0 && !isEditing && (
@@ -679,6 +716,42 @@ export function ProfileView() {
                   </motion.div>
                 )}
               </AnimatePresence>
+            </div>
+
+            {/* Looking For */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium">Looking For</label>
+                <span className="text-xs text-[var(--text-muted)]">{watchedLookingFor.length}/5</span>
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mb-3">What kind of connections are you seeking?</p>
+
+              <div className="grid grid-cols-2 gap-2">
+                {LOOKING_FOR_OPTIONS.map((option) => {
+                  const isSelected = watchedLookingFor.includes(option.value)
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => toggleLookingFor(option.value)}
+                      disabled={!isSelected && watchedLookingFor.length >= 5}
+                      className={`p-3 rounded-xl text-left transition-all ${
+                        isSelected
+                          ? 'bg-[var(--teal)] text-white ring-2 ring-[var(--teal)] ring-offset-2'
+                          : 'bg-[var(--bg-input)] hover:bg-[var(--bg-hover)] disabled:opacity-50'
+                      }`}
+                    >
+                      <span className="text-lg">{option.emoji}</span>
+                      <p className={`text-sm font-medium mt-1 ${isSelected ? 'text-white' : ''}`}>
+                        {option.label}
+                      </p>
+                      <p className={`text-xs mt-0.5 ${isSelected ? 'text-white/80' : 'text-[var(--text-muted)]'}`}>
+                        {option.description}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             {/* Availability */}
